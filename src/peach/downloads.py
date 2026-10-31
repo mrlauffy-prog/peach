@@ -159,16 +159,30 @@ _BASE32 = re.compile(r"^[a-z2-7]{32}$")
 
 
 def normalise_info_hash(raw: str) -> str:
-    """小写 40 位十六进制。32 位 base32（BEP 9 允许）先换成十六进制，两种写法才是同一个键。"""
-    text = str(raw or "").strip().lower()
-    if _HEX40.match(text):
-        return text
-    if _BASE32.match(text):
-        try:
-            return base64.b32decode(text.upper()).hex()
-        except binascii.Error:
-            pass
-    raise ValueError("磁力链接里的 infohash 不是 40 位十六进制或 32 位 base32")
+    """小写 40 位十六进制。32 位 base32（BEP 9 允许）先换成十六进制，两种写法才是同一个键。
+
+    Pasted links arrive in several shapes: percent-encoded, wrapped in quotes,
+    with whitespace/newlines, with a ``urn:btih:`` prefix, or with base32
+    padding. Normalise those before judging the length so a valid torrent is
+    not rejected for presentation noise.
+    """
+    text = unquote(str(raw or "")).strip().strip('<>[]()"\'')
+    text = re.sub(r"\s+", "", text)
+    if text[:9].casefold() == "urn:btih:":
+        text = text[9:]
+    text = text.rstrip("=").lower()
+    candidates = (text, text.replace("-", ""))
+    for candidate in candidates:
+        if _HEX40.match(candidate):
+            return candidate
+        if _BASE32.match(candidate):
+            try:
+                return base64.b32decode(candidate.upper()).hex()
+            except binascii.Error:
+                pass
+    raise ValueError(
+        "磁力链接里的 infohash 不是 40 位十六进制或 32 位 base32"
+        f"（收到的值长度 {len(text)}）")
 
 
 _TRACKER = re.compile(r"^(?:udp|https?|wss?)://[A-Za-z0-9.\-]+(?::\d{1,5})?(?:/[!-~]*)?$")
@@ -204,8 +218,14 @@ def parse_magnet(raw: str) -> Magnet:
     if not text:
         raise ValueError("请粘贴磁力链接")
     if not text.casefold().startswith("magnet:"):
-        info_hash = normalise_info_hash(text)
-        return Magnet(info_hash, f"magnet:?xt=urn:btih:{info_hash}")
+        # Only decode the whole string when it is a percent-encoded magnet.
+        # A normal magnet must keep its original URI, including encoded trackers.
+        decoded = unquote(text).strip()
+        if decoded.casefold().startswith("magnet:"):
+            text = decoded
+        else:
+            info_hash = normalise_info_hash(text)
+            return Magnet(info_hash, f"magnet:?xt=urn:btih:{info_hash}")
     query = parse_qs(urlsplit(text).query)
     for value in query.get("xt", []):
         if value.casefold().startswith("urn:btih:"):

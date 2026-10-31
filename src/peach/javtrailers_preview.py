@@ -88,7 +88,7 @@ def preview_url(code: str, cache=None) -> str:
     does not hide a title for 24 hours.
     """
     def fetch() -> bytes:
-        with http_client(timeout=20, follow_redirects=True) as client:
+        with http_client(timeout=8, follow_redirects=True) as client:
             client.headers.update({
                 "User-Agent": USER_AGENT,
                 "Referer": SITE + "/",

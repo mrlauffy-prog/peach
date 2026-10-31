@@ -84,6 +84,21 @@ class MagnetTests(unittest.TestCase):
         self.assertEqual(dl.parse_magnet(f"magnet:?xt=urn:btih:{base32}").info_hash, HASH)
         self.assertEqual(dl.parse_magnet(HASH.upper()).info_hash, HASH)
 
+    def test_pasted_magnet_noise_does_not_change_the_key(self):
+        base32 = "ZHQVOY7XELZD5GFCTXWN7LRUDOMNKMCW"
+        cases = [
+            f"  {HASH.upper()}  ",
+            f'"{HASH}"',
+            f"<{HASH}>",
+            f"urn:btih:{HASH}",
+            f"magnet:?xt=urn:btih:{base32}=",
+            f"magnet:?xt=urn:btih:{HASH[:8]}-{HASH[8:]}",
+            f"magnet%3A%3Fxt%3Durn%3Abtih%3A{HASH}%26dn%3DABC-123",
+        ]
+        for raw in cases:
+            with self.subTest(raw=raw):
+                self.assertEqual(dl.parse_magnet(raw).info_hash, HASH)
+
     def test_the_display_name_comes_from_dn(self):
         magnet = dl.parse_magnet(MAGNET)
         self.assertEqual((magnet.info_hash, magnet.name, magnet.uri), (HASH, "ABC-123", MAGNET))

@@ -9,7 +9,7 @@ Start here:
 | [CLOUD-PROVIDERS.md](CLOUD-PROVIDERS.md) | PikPak vs 115 vs CloudDrive2, costs, how Peach uses each, and registration links |
 | [PIKPAK.md](PIKPAK.md) | Live PikPak setup: WebDAV, rclone mount, Peach media root, download credential, captcha fixes, verification |
 | [TRAILERS.md](TRAILERS.md) | JavTrailers 1080p HLS integration, URL/slug rules, proxy flow, verification |
-| [PERFORMERS.md](PERFORMERS.md) | Why performer profiles were empty, the 2026-10-31 backfill, and the required bulk-profile feature |
+| [PERFORMERS.md](PERFORMERS.md) | Why performer profiles were empty, the 2026-10-31 backfill, the bulk JavTrailers → JavDatabase script, and the daily timer |
 
 Short version of the current production setup:
 

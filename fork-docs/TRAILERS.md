@@ -73,7 +73,8 @@ It:
 - extracts the `media.javtrailers.com/.../playlist.m3u8` master
 - falls back to site search for non-standard codes
 - caches a positive result for 24 hours in `RemoteMediaCache`
-- does **not** cache a negative result, so a transient block does not hide a title for a day
+- caches a negative result only through the cache's short failure marker, so a transient block does not hide a title for a day
+- uses an 8-second timeout; a slow JavTrailers request falls through to JavDB instead of stalling the detail page
 
 `web_jav_detail._preview_fields()` now tries:
 

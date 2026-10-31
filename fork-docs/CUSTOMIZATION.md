@@ -250,13 +250,40 @@ Known operational constraint: PikPak refresh tokens are single-use. Peach must b
 
 Cause: `performer_profile` had 0 rows. The normal `performer_profile_followup` was never queued because the recent `library-processing` runs were explicit asset runs (`include_stock=False`) or their follow-up budget went to avatars.
 
-Fix applied: one-off backfill from archived minnano-av pages, written as `auto:performer-profile@manual-*` with reversible batches. Result: **20 profiles filled out of 60**; the remaining rows are 13 male performers and 27 female performers without an exact archived page at the time of the run. Full details, verification SQL, the Cloudflare limitation, and the required bulk action are in [PERFORMERS.md](PERFORMERS.md).
+Fix applied: minnano-av archived backfill plus a bulk JavDatabase pass. Result: **44 profiles filled out of 60**; the remaining 16 are 13 male performers (the profile sources are female-only) and 3 female performers without a usable matching page.
 
-Fork requirement: a visible **Fill missing profiles** bulk action with progress, source-blocked reporting, idempotency, and no guessing on ambiguous names.
+The bulk pass is one command and is also installed as a daily timer:
+
+```text
+fork-docs/scripts/javdatabase_profile_backfill.py
+peach-performer-profiles.timer
+```
+
+Full details, verification SQL, the Cloudflare limitation, and the remaining bulk-action UI requirement are in [PERFORMERS.md](PERFORMERS.md).
 
 ### 2.11 Trailer quality
 
 JavTrailers provides a 1080p HLS master for many titles; JavDB's public preview is 720p and DMM's CDN is blocked here. The fork now prefers JavTrailers, then JavDB, then DMM. See [TRAILERS.md](TRAILERS.md).
+
+### 2.12 Magnet link rejected as “not 40 hex / 32 base32”
+
+Symptom: submitting a download returned HTTP 400 with:
+
+```text
+ValueError: Magnet link里的 infohash 不是 40 places十六进制或 32 places base32
+```
+
+The API returned only `400`, so the exact pasted string was not in the access log. The parser was strict about presentation noise. It now accepts:
+
+- percent-encoded whole magnets (`magnet%3A%3Fxt%3D...`);
+- surrounding quotes, angle brackets, spaces, and newlines;
+- a leading `urn:btih:`;
+- 32-character base32 with `=` padding;
+- hyphen-separated hex hashes.
+
+It still rejects a true `btmh`/v2-only magnet and reports the received value length. Normal magnets keep their original tracker encoding; only the infohash is normalised. Tests are in `tests/test_downloads.py`.
+
+If the same link still fails, the value is not a BitTorrent v1 infohash (for example a v2 `btmh` link or a non-magnet URL); PikPak/115 do not support those through Peach.
 
 ---
 
@@ -792,6 +819,10 @@ systemctl status rclone-gdrive-upload.timer
 systemctl status rclone-pikpak.service
 ls -la '/mnt/pikpak/My Pack/Peach'
 
+# Performer profile bulk job
+systemctl status peach-performer-profiles.timer
+journalctl -u peach-performer-profiles.service -n 30 --no-pager
+
 # Cloudflare tunnel
 systemctl status peach-tunnel.service
 
@@ -814,3 +845,4 @@ Important paths:
 - `/var/lib/peach/overrides/web_jav_detail.py`
 - `/var/lib/peach/overrides/javtrailers_preview.py`
 - `/var/lib/peach/overrides/downloads_pikpak.py`
+- `/var/lib/peach/overrides/downloads.py`

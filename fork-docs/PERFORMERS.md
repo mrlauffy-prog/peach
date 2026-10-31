@@ -80,16 +80,59 @@ A one-off maintenance script ran on the host (not in the container). The batches
 ```text
 auto:performer-profile@manual-jina-20261031       # first two rows
 auto:performer-profile@manual-wayback-20261031    # one row
-auto:performer-profile@manual-yahoo-20261031      # main pass
-auto:performer-profile@manual-known-ids-20261031  # verified IDs
+auto:performer-profile@manual-yahoo-20261031      # main minnano pass
+auto:performer-profile@manual-known-ids-20261031  # verified minnano IDs
+auto:performer-profile@javdatabase-20261031        # bulk JavDatabase pass
+auto:performer-profile@javdatabase-manual-20261031 # alias-mapped rows
 ```
 
-Result on 2026-10-31: **20 `performer_profile` rows** out of 60 performer entities. The remaining 40 are:
+Result on 2026-10-31 after the JavDatabase pass: **44 `performer_profile` rows** out of 60 performer entities. The remaining 16 are:
 
-- 13 male performers (minnano-av is a female-performer database);
-- 27 female performers with no exact archived minnano-av profile page or a search-engine block at the time of the run.
+- 13 male performers (neither minnano-av nor JavDatabase is a male-performer profile source);
+- 3 female performers with no usable matching profile page (`安倍亜沙美`, `古川ほのか`, `桜井千春`).
 
 All batches are reversible. Do not guess a profile for an ambiguous name.
+
+### Bulk fix: JavTrailers → JavDatabase
+
+The one-shot fix lives in:
+
+```text
+fork-docs/scripts/javdatabase_profile_backfill.py
+```
+
+For every performer without a profile it:
+
+1. reads one of their video codes;
+2. opens the JavTrailers video page;
+3. reads the cast badge, e.g. `Ichika Matsumoto 松本いちか`, and extracts the romanized name;
+4. fetches `https://www.javdatabase.com/idols/<romaji-slug>/`;
+5. writes birth date, height, measurements, cup, and debut.
+
+It is safe to re-run: existing rows are skipped, male performers are skipped, and a page with no fields is not written.
+
+Run it manually:
+
+```bash
+cd /home/desktop/projects/peach
+PYTHONPATH=src python3 fork-docs/scripts/javdatabase_profile_backfill.py
+```
+
+It is also installed as a daily host job:
+
+```text
+peach-performer-profiles.service
+peach-performer-profiles.timer   # 04:30 with a 30-minute jitter
+```
+
+Check it with:
+
+```bash
+systemctl status peach-performer-profiles.timer
+journalctl -u peach-performer-profiles.service -n 30 --no-pager
+```
+
+The timer only fills missing rows. It does not overwrite a human-authored row and does not touch male performers.
 
 The script:
 
@@ -115,6 +158,8 @@ python3 scripts/revert_auto_landing.py --source auto:performer-profile@manual-wa
 python3 scripts/revert_auto_landing.py --source auto:performer-profile@manual-jina-20261031
 python3 scripts/revert_auto_landing.py --source auto:performer-profile@manual-yahoo-20261031
 python3 scripts/revert_auto_landing.py --source auto:performer-profile@manual-known-ids-20261031
+python3 scripts/revert_auto_landing.py --source auto:performer-profile@javdatabase-20261031
+python3 scripts/revert_auto_landing.py --source auto:performer-profile@javdatabase-manual-20261031
 ```
 
 The reusable maintenance script is now in the fork:
@@ -148,6 +193,8 @@ Backups made before the run:
 /var/lib/peach/backups/ledger.before-profile-yahoo.20261031-1505.db
 /var/lib/peach/backups/ledger.before-profile-brave.20261031-1500.db
 ```
+
+The `before-profile-brave` backup is the last snapshot before the JavDatabase bulk pass (the Brave pass wrote nothing).
 
 ### Verification
 
