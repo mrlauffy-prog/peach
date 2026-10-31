@@ -91,6 +91,8 @@ class MagnetTests(unittest.TestCase):
             f'"{HASH}"',
             f"<{HASH}>",
             f"urn:btih:{HASH}",
+            f"urn:btih:urn:btih:{HASH}",
+            f"0x{HASH}",
             f"magnet:?xt=urn:btih:{base32}=",
             f"magnet:?xt=urn:btih:{HASH[:8]}-{HASH[8:]}",
             f"magnet%3A%3Fxt%3Durn%3Abtih%3A{HASH}%26dn%3DABC-123",

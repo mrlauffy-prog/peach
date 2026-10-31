@@ -168,9 +168,9 @@ def normalise_info_hash(raw: str) -> str:
     """
     text = unquote(str(raw or "")).strip().strip('<>[]()"\'')
     text = re.sub(r"\s+", "", text)
-    if text[:9].casefold() == "urn:btih:":
+    while text[:9].casefold() == "urn:btih:":
         text = text[9:]
-    text = text.rstrip("=").lower()
+    text = text.rstrip("=").lower().removeprefix("0x")
     candidates = (text, text.replace("-", ""))
     for candidate in candidates:
         if _HEX40.match(candidate):

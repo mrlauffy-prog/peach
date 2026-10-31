@@ -41,8 +41,8 @@ UA = ('Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 '
 
 CAST = re.compile(r'href="/casts/([^"]+)"[^>]*>([^<]+)</a>')
 VIDEO = re.compile(r'href="(/video/[a-z0-9]+)"')
-DOB = re.compile(r'<b>DOB:</b>.*?class="idol-box-link">(\d{4}-\d{2}-\d{2})</a>', re.S)
-DEBUT = re.compile(r'<b>Debut:</b>.*?class="idol-box-link">(\d{4}-\d{2}-\d{2}|\d{4})</a>', re.S)
+DOB = re.compile(r'<b>DOB:</b>\s*(?:<a[^>]*>)?([^<]+)</a>', re.S)
+DEBUT = re.compile(r'<b>Debut:</b>\s*(?:<a[^>]*>)?([^<]+)</a>', re.S)
 MEAS = re.compile(r'<b>Measurements:</b>\s*(\d+)-(\d+)-(\d+)')
 CUP = re.compile(r'<b>Cup:</b>.*?class="idol-box-link">([A-Z])</a>', re.S)
 HEIGHT = re.compile(r'<b>Height:</b>.*?class="idol-box-link">(\d+)\s*cm</a>', re.S)
@@ -128,17 +128,23 @@ def javdatabase_page(romaji):
 def profile_from_page(html, page_url):
     dob = DOB.search(html)
     debut = DEBUT.search(html)
+    dob_value = dob.group(1).strip() if dob else ''
+    debut_value = debut.group(1).strip() if debut else ''
+    if not re.fullmatch(r'\d{4}-\d{2}-\d{2}', dob_value):
+        dob_value = None
+    if not re.fullmatch(r'\d{4}-\d{2}-\d{2}|\d{4}', debut_value):
+        debut_value = None
     meas = MEAS.search(html)
     cup = CUP.search(html)
     height = HEIGHT.search(html)
     place = BIRTHPLACE.search(html)
     blood = BLOOD.search(html)
     profile = {
-        'birth_date': dob.group(1) if dob else None,
+        'birth_date': dob_value,
         'height_cm': int(height.group(1)) if height else None,
         'cup': cup.group(1) if cup else None,
-        'debut_date': debut.group(1) if debut and len(debut.group(1)) == 10 else None,
-        'debut_year': int(debut.group(1)[:4]) if debut else None,
+        'debut_date': debut_value if debut_value and len(debut_value) == 10 else None,
+        'debut_year': int(debut_value[:4]) if debut_value else None,
         'birthplace': (place.group(1).strip() if place else '') or None,
         'blood_type': (blood.group(1).strip() if blood else '') or None,
         'tags': [],

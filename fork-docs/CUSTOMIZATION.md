@@ -277,9 +277,9 @@ The API returned only `400`, so the exact pasted string was not in the access lo
 
 - percent-encoded whole magnets (`magnet%3A%3Fxt%3D...`);
 - surrounding quotes, angle brackets, spaces, and newlines;
-- a leading `urn:btih:`;
+- a leading `urn:btih:` (including a duplicated prefix);
 - 32-character base32 with `=` padding;
-- hyphen-separated hex hashes.
+- hyphen-separated and `0x`-prefixed hex hashes.
 
 It still rejects a true `btmh`/v2-only magnet and reports the received value length. Normal magnets keep their original tracker encoding; only the infohash is normalised. Tests are in `tests/test_downloads.py`.
 
@@ -645,6 +645,8 @@ Acceptance:
 ### 4.10 Bulk performer profile enrichment
 
 Current state: profiles are filled by `performer_profile_followup`, one entity per task. It is slow, easy to starve behind avatar jobs, and blocked entirely when the source requires a browser the container does not have.
+
+Host-side implementation already added: `fork-docs/scripts/javdatabase_profile_backfill.py` and the daily `peach-performer-profiles.timer`. It fills every missing female profile it can identify from JavTrailers cast metadata and JavDatabase. The API/UI action below is still the in-app requirement.
 
 Required API:
 
