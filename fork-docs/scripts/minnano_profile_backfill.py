@@ -3,7 +3,7 @@
 The production follow-up is `performer_profile_followup`, but minnano-av is
 Cloudflare-protected from the container. This script is a host-side fallback:
 
-1. Yahoo Japan search for `site:minnano-av.com <name>`.
+1. Brave search for `site:minnano-av.com <name>`.
 2. Last working Wayback Machine snapshot of the actress page.
 3. Parse with `peach.minnano_av.profile()`.
 4. Verify the page name/aliases match the ledger entity.
@@ -30,9 +30,9 @@ from peach.performer_profiles import write_profile
 from peach.social_links import name_key
 
 DB = '/var/lib/peach/database/ledger.db'  # override for a copy
-CACHE = Path('/var/lib/peach/generated/provider-cache/minnano-yahoo')
+CACHE = Path('/var/lib/peach/generated/provider-cache/minnano-brave')
 CACHE.mkdir(parents=True, exist_ok=True)
-BATCH = 'manual-yahoo-20261031'
+BATCH = 'manual-brave-20261031'
 SOURCE = f'auto:performer-profile@{BATCH}'
 UA = ('Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 '
       '(KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36')
@@ -74,7 +74,7 @@ def search_ids(name):
         text = path.read_text(encoding='utf-8')
     else:
         query = urllib.parse.quote(f'site:minnano-av.com {name}')
-        text = http_text('https://search.yahoo.co.jp/search?p=' + query)
+        text = http_text('https://search.brave.com/search?q=' + query)
         path.write_text(text, encoding='utf-8')
         sleep(1.2)
     ids = re.findall(r'minnano-av\.com/actress(\d+)\.html', text)

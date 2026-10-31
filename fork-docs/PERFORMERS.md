@@ -75,18 +75,26 @@ Direct requests from this host return `403` / “Just a moment…”. The built-
 
 ## 4. Backfill performed on 2026-10-31
 
-A one-off maintenance script ran on the host (not in the container) and wrote profiles with:
+A one-off maintenance script ran on the host (not in the container). The batches are:
 
 ```text
-source = auto:performer-profile@manual-yahoo-20261031
+auto:performer-profile@manual-jina-20261031       # first two rows
+auto:performer-profile@manual-wayback-20261031    # one row
+auto:performer-profile@manual-yahoo-20261031      # main pass
+auto:performer-profile@manual-known-ids-20261031  # verified IDs
 ```
 
-The first attempt used `manual-jina-20261031` and `manual-wayback-20261031` for a few rows. All three batches are reversible.
+Result on 2026-10-31: **20 `performer_profile` rows** out of 60 performer entities. The remaining 40 are:
+
+- 13 male performers (minnano-av is a female-performer database);
+- 27 female performers with no exact archived minnano-av profile page or a search-engine block at the time of the run.
+
+All batches are reversible. Do not guess a profile for an ambiguous name.
 
 The script:
 
-1. searches DuckDuckGo HTML (`POST https://html.duckduckgo.com/html/`) for
-   `site:minnano-av.com <name>`
+1. searches Yahoo Japan (`https://search.yahoo.co.jp/search?p=...`) for
+   `site:minnano-av.com "<name>"`
 2. extracts the unique `actressNNNNNN.html` id
 3. fetches the last working Wayback Machine snapshot with
    `https://web.archive.org/web/<timestamp>id_/<url>` and `curl --compressed`
@@ -106,6 +114,7 @@ sqlite3 /var/lib/peach/database/ledger.db \
 python3 scripts/revert_auto_landing.py --source auto:performer-profile@manual-wayback-20261031
 python3 scripts/revert_auto_landing.py --source auto:performer-profile@manual-jina-20261031
 python3 scripts/revert_auto_landing.py --source auto:performer-profile@manual-yahoo-20261031
+python3 scripts/revert_auto_landing.py --source auto:performer-profile@manual-known-ids-20261031
 ```
 
 The reusable maintenance script is now in the fork:
@@ -136,6 +145,8 @@ Backups made before the run:
 ```text
 /var/lib/peach/backups/ledger.before-profile-backfill.20261031-1435.db
 /var/lib/peach/backups/ledger.before-profile-wayback.20261031-1448.db
+/var/lib/peach/backups/ledger.before-profile-yahoo.20261031-1505.db
+/var/lib/peach/backups/ledger.before-profile-brave.20261031-1500.db
 ```
 
 ### Verification

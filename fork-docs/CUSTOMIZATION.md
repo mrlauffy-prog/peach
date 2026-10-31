@@ -54,7 +54,7 @@ Host: Arch Linux VM (Linode), Docker, host networking.
   - 4 missing local video records (`BMW-361`, `JUR-719`, `MANX-030`)
 - Dead JavDB subscriptions removed:
   - `21aq`, `91JV`, `K40nQ`, `p3p6b`
-  - only `X6ab` remains
+  - `X6ab` and `bA2Re` remain, both without last-error entries
 - JavDB session:
   - A fresh cookie from the server Chrome profile was imported on 2026-10-31.
   - JavDB `locale=en` produced US dates (`11/17/2026`), which the feed parser rejected.
@@ -240,6 +240,8 @@ folder_id("/My Pack/Peach") -> <id>
 tasks() -> []
 ```
 
+Known API trap: `POST /api/configuration/downloads` always saves, and posting `{}` resets the target and `pikpak_root`. Use `GET /api/configuration/downloads/check` for a read-only probe, or read `/var/lib/peach/state/downloads.json`. Fork fix: add a true read-only GET for the settings payload and reject an empty save that would erase configured providers.
+
 Full runbook: [PIKPAK.md](PIKPAK.md).
 
 Known operational constraint: PikPak refresh tokens are single-use. Peach must be the only refresher, or the browser and Peach will invalidate each other. If Peach is refreshed first, re-login to the PikPak web UI when browser access is needed.
@@ -248,7 +250,7 @@ Known operational constraint: PikPak refresh tokens are single-use. Peach must b
 
 Cause: `performer_profile` had 0 rows. The normal `performer_profile_followup` was never queued because the recent `library-processing` runs were explicit asset runs (`include_stock=False`) or their follow-up budget went to avatars.
 
-Fix applied: one-off backfill from archived minnano-av pages, written as `auto:performer-profile@manual-*` with reversible batches. Full details, verification SQL, the Cloudflare limitation, and the required bulk action are in [PERFORMERS.md](PERFORMERS.md).
+Fix applied: one-off backfill from archived minnano-av pages, written as `auto:performer-profile@manual-*` with reversible batches. Result: **20 profiles filled out of 60**; the remaining rows are 13 male performers and 27 female performers without an exact archived page at the time of the run. Full details, verification SQL, the Cloudflare limitation, and the required bulk action are in [PERFORMERS.md](PERFORMERS.md).
 
 Fork requirement: a visible **Fill missing profiles** bulk action with progress, source-blocked reporting, idempotency, and no guessing on ambiguous names.
 

@@ -8,7 +8,7 @@ This runbook records the PikPak integration on this host. It is operational, not
 
 | Item | Status |
 |---|---|
-| PikPak account | Premium, logged in through the browser session |
+| PikPak account | Premium; Peach owns the current refreshed token |
 | WebDAV | Enabled through PikPak's own API |
 | WebDAV app credential | Created, named `Peach` |
 | rclone remote | `[pikpak]`, type `webdav` |
@@ -277,7 +277,7 @@ Shape (values redacted):
 
 Permissions must be `0600`, owner `1000:1000`.
 
-Peach refreshes this token shortly before `expires_at`. **A PikPak refresh token is single-use: every refresh rotates it.** Do not run two independent refreshers against the same account:
+Peach refreshes this token shortly before `expires_at`. **A PikPak refresh token is single-use: every refresh rotates it.** The token was refreshed once by Peach on 2026-10-31 to verify rotation, so the PikPak web tab may now need a fresh login; Peach owns the current token. Do not run two independent refreshers against the same account:
 
 - Peach owns this token.
 - Do not leave a second Peach/browser process refreshing the same token.
@@ -336,7 +336,13 @@ tasks 0
 
 ## 7. Peach download settings
 
-Use the settings API (the GET route is POST-only in this version):
+Use the settings API. **Do not POST `{}` to read the configuration**: this endpoint always saves, and an empty body resets the target and `pikpak_root`. Read the saved file instead:
+
+```bash
+cat /var/lib/peach/state/downloads.json
+```
+
+To change the configuration, POST the full desired body:
 
 ```bash
 TOK=$(cat /var/lib/peach/secrets/auth-token)
@@ -382,8 +388,11 @@ curl -sS -H "X-Token: $TOK" http://127.0.0.1:8900/api/sources | \
   python3 -c 'import sys,json; d=json.load(sys.stdin); print([(s["location"],s["online"]) for s in d["sources"]])'
 
 # 3. Peach configured the provider
+cat /var/lib/peach/state/downloads.json
+# or, if you need the computed provider rows:
 curl -sS -X POST -H "X-Token: $TOK" -H 'Content-Type: application/json' \
-  -d '{}' http://127.0.0.1:8900/api/configuration/downloads | \
+  -d '{"pikpak_root":"R:\\peach\\pikpak","targets":{"pikpak":"/My Pack/Peach"},"wait_hours":168}' \
+  http://127.0.0.1:8900/api/configuration/downloads | \
   python3 -c 'import sys,json; d=json.load(sys.stdin); print(d["config"], d["providers"])'
 
 # 4. Direct API read
