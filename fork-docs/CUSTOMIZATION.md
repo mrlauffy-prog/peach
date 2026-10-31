@@ -150,7 +150,42 @@ Chosen policy: **Option A — GDrive is the library; Downloads is staging only.*
 - Future torrent downloads appear in Peach after upload and scan.
 - OneDrive is removed; no second cloud library is maintained.
 
-### 2.6 Cloud download sources
+### 2.6 Discovery preview video returned 404 / “media could not be loaded” — fixed
+
+Symptom: `/works/MIDA-859` and many other discovery pages showed:
+
+> This media could not be loaded. It may be unavailable, or your browser may not support its format.
+
+Cause: Peach tried DMM’s preview CDN first. `cc3001.dmm.co.jp` returned CloudFront `403` from this host, so `/jav-preview/...` returned `404`. The JavDB public signed HLS preview was available and working, but it was only used as a fallback.
+
+Fix applied in `/var/lib/peach/overrides/web_jav_detail.py`:
+
+- Prefer the JavDB public signed HLS preview URL.
+- Refresh the signature when `t` is older than one hour.
+- Fall back to DMM/JavDB page preview only if the public preview is unavailable.
+- The override is mounted read-only into the container via `compose.yaml`.
+
+Verified working for:
+
+- `MIDA-859`
+- `MIDA-849`
+- `AARM-372`
+- `MYBA-097`
+
+Fork change: carry this logic into `src/peach/web_jav_detail.py` and add a regression test for an expired JavDB `t` signature and a DMM `403`.
+
+### 2.7 `jav/cast` is already included
+
+`/mnt/gdrive/jav` is mounted to `/media/gdrive`, so Peach already sees:
+
+```text
+/media/gdrive/cast
+/media/gdrive/favourites
+```
+
+Do not add a second storage root for `jav/cast`; that would duplicate the same files under two paths.
+
+### 2.8 Cloud download sources
 
 Peach supports cloud download through:
 
