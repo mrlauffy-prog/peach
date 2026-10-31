@@ -1,6 +1,8 @@
-# rclone + Google Drive setup
+# rclone + Google Drive + PikPak setup
 
-This is the runbook for the rclone side of Peach on this host. It covers installation, OAuth, the mount, the upload timer, restart order, and the Google verification problem.
+This is the runbook for the rclone side of Peach on this host. It covers installation, OAuth, the Google Drive mount, the PikPak WebDAV mount, the upload timer, restart order, and the Google verification problem.
+
+PikPak's WebDAV mount is documented in full in [PIKPAK.md](PIKPAK.md); this file only records the shared rclone rules.
 
 ---
 
@@ -12,11 +14,17 @@ Google Drive
       ├── cast/
       └── favourites/
 
+PikPak:
+  pikpak: (WebDAV https://dav.mypikpak.com)
+    -> /mnt/pikpak
+    -> Peach /media/pikpak (library PikPak)
+
 Host mount:
   gdrive:  ->  /mnt/gdrive
 
 Peach container:
   /mnt/gdrive/jav  ->  /media/gdrive
+  /mnt/pikpak      ->  /media/pikpak
 ```
 
 `/mnt/gdrive/jav` is the Peach media root. It already contains **both** `jav/cast` and `jav/favourites`. Do **not** add a separate mount for `jav/cast` unless you intentionally want a separate Peach library; adding it would duplicate the same files under two storage roots.
@@ -168,11 +176,16 @@ Answer **No** for a normal personal Drive. If you answer Yes and have no Shared 
 After any rclone mount restart:
 
 ```bash
+# Google Drive
 sudo systemctl restart rclone-gdrive.service
+sudo systemctl restart peach.service
+
+# PikPak (same rule)
+sudo systemctl restart rclone-pikpak.service
 sudo systemctl restart peach.service
 ```
 
-Why: the Peach container bind-mounts `/mnt/gdrive/jav` with `rslave`. When rclone is restarted, the FUSE mount is replaced. An already-running container can be left pointing at the old mount and reports:
+Why: the Peach container bind-mounts `/mnt/gdrive/jav` and `/mnt/pikpak` with `rslave`. When rclone is restarted, the FUSE mount is replaced. An already-running container can be left pointing at the old mount and reports:
 
 ```text
 Transport endpoint is not connected
@@ -220,6 +233,15 @@ Expected:
 ```json
 {"protocol":"range","mime_type":"video/mp4", ...}
 ```
+
+Verify PikPak:
+
+```bash
+systemctl status rclone-pikpak.service --no-pager
+ls -la '/mnt/pikpak/My Pack/Peach'
+```
+
+Expected: the mount is active and the target folder is visible.
 
 ---
 
@@ -333,11 +355,13 @@ Then re-authorize.
 
 ### `Transport endpoint is not connected`
 
-Restart Peach after rclone:
+Restart Peach after either rclone mount:
 
 ```bash
 sudo systemctl restart peach.service
 ```
+
+The same applies to `/media/pikpak` if `rclone-pikpak` was restarted.
 
 ### `invalid_grant` / `unauthorized_client`
 

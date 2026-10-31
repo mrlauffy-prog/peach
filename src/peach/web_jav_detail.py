@@ -4,6 +4,7 @@ from __future__ import annotations
 import re
 import json
 import base64
+import time
 from datetime import datetime, timezone
 from functools import wraps
 
@@ -277,36 +278,69 @@ def _fetch_image(contract, code, index, *, movie=None):
     return image
 
 
+def _javtrailers_preview(contract, code):
+    """JavTrailers' public 1080p HLS master, when it has this title.
+
+    It is preferred over JavDB's 720p preview and DMM's geo-blocked CDN. A
+    lookup failure is not fatal: the caller falls through to those sources.
+    """
+    try:
+        from .javtrailers_preview import preview_url
+        return preview_url(code, cache_for(contract))
+    except Exception:
+        return ''
+
+
+def _public_preview_url(code, source):
+    """JavDB's own signed HLS preview, refreshed when its signature is stale.
+
+    This is tried after JavTrailers and before DMM because DMM's preview CDN
+    is geo-blocked on some hosts (CloudFront 403), while JavDB's public
+    preview proxy works.
+    """
+    url = preview_video_url(source)
+    if not url:
+        return ''
+    match = re.search(r'[?&]t=(\d+)', url)
+    try:
+        stamp = int(match.group(1)) if match else 0
+    except (TypeError, ValueError):
+        stamp = 0
+    if not stamp or stamp >= time.time() - 3600:
+        return url
+    try:
+        fresh = PUBLIC_API.movie(code, refresh=True, source_id=source.get('id'))
+        return preview_video_url(fresh)
+    except PublicSourceUnavailable:
+        return ''
+
+
 def _preview_fields(contract, code, source, *, refresh=False):
     from .jav_official_preview import dmm_preview, javdb_preview, prestige_preview
 
-    prestige = ('prestige' in str(source.get('maker_name') or '').casefold()
-                or 'プレステージ' in str(source.get('maker_name') or ''))
-    provider = 'prestige' if prestige else 'dmm'
-    fetch = (lambda: prestige_preview(code, contract.follow_secrets_root)) if prestige else (
-        lambda: dmm_preview(code, contract.follow_secrets_root))
-    sources = [(provider, fetch), ('javdb', lambda: javdb_preview(code, source.get('id'), contract.follow_secrets_root))]
-    url, errors = '', []
-    for provider, fetch in sources:
-        try:
-            result = PUBLIC_API.official_preview(code, fetch, released=source.get('release_date'),
-                                                 refresh=refresh, provider=provider,
-                                                 **({'source_id': source.get('id')} if provider == 'javdb' else {}))
-            url = result['url']
-            failure = cache_error(f'preview:{provider}:' + code)
-            if failure and not url:
-                raise PublicSourceUnavailable(failure)
-        except PublicSourceUnavailable as error:
-            errors.append(str(error))
-        if url:
-            break
+    url, errors = _javtrailers_preview(contract, code), []
     if not url:
-        url = preview_video_url(source)
-        if url and '?' in url:
+        url = _public_preview_url(code, source)
+    if not url:
+        prestige = ('prestige' in str(source.get('maker_name') or '').casefold()
+                    or 'プレステージ' in str(source.get('maker_name') or ''))
+        provider = 'prestige' if prestige else 'dmm'
+        fetch = (lambda: prestige_preview(code, contract.follow_secrets_root)) if prestige else (
+            lambda: dmm_preview(code, contract.follow_secrets_root))
+        sources = [(provider, fetch), ('javdb', lambda: javdb_preview(code, source.get('id'), contract.follow_secrets_root))]
+        for provider, fetch in sources:
             try:
-                url = preview_video_url(PUBLIC_API.media_movie(code, movie=source)) or url
+                result = PUBLIC_API.official_preview(code, fetch, released=source.get('release_date'),
+                                                     refresh=refresh, provider=provider,
+                                                     **({'source_id': source.get('id')} if provider == 'javdb' else {}))
+                url = result['url']
+                failure = cache_error(f'preview:{provider}:' + code)
+                if failure and not url:
+                    raise PublicSourceUnavailable(failure)
             except PublicSourceUnavailable as error:
                 errors.append(str(error))
+            if url:
+                break
     if not url:
         return {'preview_video_url': '', 'preview_state': 'unavailable' if errors else 'missing',
                 **({'preview_message': '；'.join(dict.fromkeys(errors))} if errors else {})}

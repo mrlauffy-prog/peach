@@ -250,6 +250,13 @@ class WebClientTests(_Case):
                          ("2.0.0", "mypikpak.com"))
         self.assertEqual(captcha["meta"]["captcha_sign"], pk.captcha_sign("webdevice", "1790733736477", pk.WEB))
 
+    def test_a_web_task_read_requests_a_captcha_token(self):
+        """PikPak rejects an unsigned web read with captcha_invalid, not just writes."""
+        self.stored["expires_at"] = "9999999999"
+        self.assertEqual(self.provider().status(self.task()).state, dl.MISSING)
+        actions = [body["action"] for body in self.bodies("/v1/shield/captcha/init")]
+        self.assertIn("GET:/drive/v1/tasks", actions)
+
     def test_a_rejected_web_refresh_names_the_reason_and_asks_for_the_browser(self):
         self.stored["refresh_token"] = "stale"
         with self.assertRaises(dl.DownloadError) as caught:

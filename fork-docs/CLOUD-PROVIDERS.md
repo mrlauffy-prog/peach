@@ -19,15 +19,18 @@ CloudDrive2 is **not** storage. It does not give you a drive by itself.
 
 ## 2. Recommended choice for this setup
 
-### PikPak Premium + CloudDrive2 free
+### PikPak Premium + official WebDAV (current)
 
 Why:
 
 - PikPak is practical to register and pay for outside China (card/PayPal/crypto).
 - Peach talks to PikPak directly for submission.
-- CloudDrive2 free tier is enough to mount PikPak (1 cloud + 1 local mount).
+- Premium includes official WebDAV; no CloudDrive2 subscription is needed to mount PikPak.
+- rclone mounts `https://dav.mypikpak.com` at `/mnt/pikpak`; Peach reads it as `/media/pikpak`.
 - Google Drive stays the main library through rclone.
 - 10 TB regional annual pricing is around **$57.59/year**; Global Premium costs more. Check the checkout price for your country.
+
+Current deployment: PikPak is mounted and configured. See [PIKPAK.md](PIKPAK.md). CloudDrive2 is **not** required for PikPak and is not currently running.
 
 ### 115 + CloudDrive2
 
@@ -51,8 +54,12 @@ The current registration page asks for a **+86 Chinese phone number**. If you do
 1. Peach submits a magnet to PikPak's API.
 2. PikPak downloads it into your PikPak account.
 3. The file stays on PikPak.
-4. PikPak must be mounted (usually through CloudDrive2) and declared as a `pikpak` media root.
+4. PikPak is mounted through **official WebDAV** (rclone) and declared as a `pikpak` media root.
 5. Peach reads/plays it from that mount.
+
+The current target is `/My Pack/Peach`; the ledger prefix is `R:\peach\pikpak`.
+
+PikPak's web token needs captcha tokens even for read endpoints. The fork supplies them for file and task listing; otherwise the provider reports `captcha_invalid`.
 
 Peach does **not** download the file to this host and does **not** upload it to Google Drive.
 
@@ -79,7 +86,7 @@ Peach does **not** download the file to this host and does **not** upload it to 
 - **Lifetime:** ¥499 (and a lifetime-lite tier).
 - Cross-cloud copy, multi-cloud backup, encrypted folders, file notifications, and more than 2 clouds are paid Core Pro features.
 
-For a PikPak-only or 115-only setup, the free tier is enough.
+CloudDrive2 is only needed for 115 or for a cloud account without a usable native/WebDAV mount. PikPak does not need it.
 
 ---
 

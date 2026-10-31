@@ -4,6 +4,8 @@
 
 A local-first video metadata scraper and media manager.
 
+> This fork's deployment notes, fixes, and feature backlog are in [fork-docs/](fork-docs/README.md).
+
 [Website](https://peach.video) · [Download](#download-and-use) · [Live demo](https://demo.peach.video) · [Documentation](#documentation) · [简体中文](README.zh-CN.md)
 
 [![Release](https://img.shields.io/github/v/release/peach-mitao/peach?include_prereleases&sort=semver&label=release&logo=github)](https://github.com/peach-mitao/peach/releases)

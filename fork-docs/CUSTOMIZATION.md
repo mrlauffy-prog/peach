@@ -27,13 +27,22 @@ Host: Arch Linux VM (Linode), Docker, host networking.
 - Data directory: `/var/lib/peach` → `/data`
 - Media mounts:
   - `/mnt/gdrive/jav` → `/media/gdrive` (`rslave`)
+  - `/mnt/pikpak` → `/media/pikpak` (`rslave`)
   - `/home/desktop/Downloads` → `/media/downloads` (kept as staging; not a Peach library root)
 - rclone:
   - `rclone-gdrive.service` mounts `gdrive:` at `/mnt/gdrive`.
+  - `rclone-pikpak.service` mounts `pikpak:` (WebDAV) at `/mnt/pikpak`.
   - `rclone-gdrive-upload.timer` runs every 10 minutes:
     `rclone move /home/desktop/Downloads gdrive:jav/favourites --min-age 30m`.
   - A dedicated Google OAuth client ID/secret was created and authorized on 2026-10-31. The old shared rclone client ID is no longer used.
-  - **Restart Peach after restarting `rclone-gdrive`.** The bind mount uses `rslave`, but it does not recover an already-running container from a remounted FUSE endpoint. Without a Peach restart, `/media/gdrive` reports `Transport endpoint is not connected` and Peach returns `offline`.
+  - **Restart Peach after restarting either rclone mount.** The bind mounts use `rslave`, but they do not recover an already-running container from a remounted FUSE endpoint. Without a Peach restart, `/media/gdrive` or `/media/pikpak` reports `Transport endpoint is not connected`.
+- PikPak:
+  - Premium, WebDAV enabled, credential named `Peach`.
+  - rclone remote `[pikpak]` → `https://dav.mypikpak.com`.
+  - Peach media source `pikpak = R:\peach\pikpak`, mount `/media/pikpak`, library `PikPak`.
+  - Peach download target `/My Pack/Peach`.
+  - Direct provider configured; the refresh token is in `secrets/follow/download-pikpak.json`.
+  - Full runbook: [PIKPAK.md](PIKPAK.md).
 - OneDrive was removed completely on 2026-10-31:
   - config source removed
   - compose volume removed
@@ -54,6 +63,11 @@ Host: Arch Linux VM (Linode), Docker, host networking.
   - 13 main videos were identified from filenames and enriched with JavDB public metadata.
   - 13 remaining 2 MB files are promotional/ad junk with no code.
   - `/performers` now lists performers from those 13 main videos.
+  - Performer profile rows were backfilled from archived minnano-av pages on 2026-10-31. The batch source is `auto:performer-profile@manual-*`; see [PERFORMERS.md](PERFORMERS.md).
+- Discovery previews:
+  - JavTrailers 1080p HLS is preferred, then JavDB 720p, then DMM/prestige page preview.
+  - DMM's preview CDN is geo-blocked on this host; do not make it the first source.
+  - Full runbook: [TRAILERS.md](TRAILERS.md).
 - Safety backups made before the cleanup:
   - `/var/lib/peach/backups/peach-pre-cleanup.20261031-112130.tar.gz`
   - `/var/lib/peach/backups/ledger.pre-cleanup.20261031-112130.db`
@@ -156,23 +170,33 @@ Symptom: `/works/MIDA-859` and many other discovery pages showed:
 
 > This media could not be loaded. It may be unavailable, or your browser may not support its format.
 
-Cause: Peach tried DMM’s preview CDN first. `cc3001.dmm.co.jp` returned CloudFront `403` from this host, so `/jav-preview/...` returned `404`. The JavDB public signed HLS preview was available and working, but it was only used as a fallback.
+Cause: Peach tried DMM’s preview CDN first. `cc3001.dmm.co.jp` returned CloudFront `403` from this host, so `/jav-preview/...` returned `404`. The JavDB public signed HLS preview was available and working, but it tops out at 720p.
 
-Fix applied in `/var/lib/peach/overrides/web_jav_detail.py`:
+Fix applied:
 
-- Prefer the JavDB public signed HLS preview URL.
-- Refresh the signature when `t` is older than one hour.
-- Fall back to DMM/JavDB page preview only if the public preview is unavailable.
-- The override is mounted read-only into the container via `compose.yaml`.
+1. **JavTrailers 1080p HLS** is now the first source. It publishes a public master playlist with 432p/720p/1080p renditions on `media.javtrailers.com`. The page's `DVD ID` is checked so a search hit for another title is rejected.
+2. JavDB's public signed 720p HLS is the fallback; its signature is refreshed when `t` is older than one hour.
+3. DMM / Prestige / JavDB page preview is the last fallback.
+
+New files:
+
+- `src/peach/javtrailers_preview.py`
+- `/var/lib/peach/overrides/javtrailers_preview.py` (live mount)
+
+Changed files:
+
+- `src/peach/web_jav_detail.py`
+- `/var/lib/peach/overrides/web_jav_detail.py` (live mount)
+- `compose.yaml` mounts both overrides read-only
 
 Verified working for:
 
-- `MIDA-859`
-- `MIDA-849`
-- `AARM-372`
-- `MYBA-097`
+- `MIDA-859` — 1920x1080 rendition
+- `MIDA-849` — 1920x1080 rendition
+- `AARM-372` — 1920x1080 rendition
+- `MYBA-097` — master + 720p/432p (JavTrailers has no 1080p variant for this title)
 
-Fork change: carry this logic into `src/peach/web_jav_detail.py` and add a regression test for an expired JavDB `t` signature and a DMM `403`.
+Fork change: keep this order in `src/peach/web_jav_detail.py`, add unit tests for the slug/DVD-ID parser, and add a regression test for an expired JavDB `t` signature and a DMM `403`. Full runbook: [TRAILERS.md](TRAILERS.md).
 
 ### 2.7 `jav/cast` is already included
 
@@ -194,7 +218,43 @@ Peach supports cloud download through:
 
 It does not download to a plain local folder. It also never uploads cloud downloads to Google Drive; files stay in the cloud that performed the offline download.
 
-Immediate production choice: no download provider is configured yet. Configure PikPak or CloudDrive2 only if wanted; this is not required for playback.
+Immediate production choice: **PikPak direct + PikPak WebDAV mount is configured.** CloudDrive2/115 is not configured. Google Drive remains the library.
+
+### 2.9 PikPak integration
+
+Completed on 2026-10-31:
+
+- Enabled PikPak WebDAV through the account's own API.
+- Created a WebDAV credential named `Peach`.
+- Added rclone remote `[pikpak]` and `rclone-pikpak.service`.
+- Added `/mnt/pikpak` → `/media/pikpak` to Compose.
+- Added a `pikpak` storage root and `PikPak` library to `config.toml`.
+- Created `/My Pack/Peach` and configured it as the download target.
+- Saved the web session token to `secrets/follow/download-pikpak.json`.
+- Fixed `captcha_invalid` on read endpoints (`GET /drive/v1/files`, `GET /drive/v1/tasks`) by requesting a captcha token before each paginated read.
+
+Verified:
+
+```text
+folder_id("/My Pack/Peach") -> <id>
+tasks() -> []
+```
+
+Full runbook: [PIKPAK.md](PIKPAK.md).
+
+Known operational constraint: PikPak refresh tokens are single-use. Peach must be the only refresher, or the browser and Peach will invalidate each other. If Peach is refreshed first, re-login to the PikPak web UI when browser access is needed.
+
+### 2.10 Empty performer profiles
+
+Cause: `performer_profile` had 0 rows. The normal `performer_profile_followup` was never queued because the recent `library-processing` runs were explicit asset runs (`include_stock=False`) or their follow-up budget went to avatars.
+
+Fix applied: one-off backfill from archived minnano-av pages, written as `auto:performer-profile@manual-*` with reversible batches. Full details, verification SQL, the Cloudflare limitation, and the required bulk action are in [PERFORMERS.md](PERFORMERS.md).
+
+Fork requirement: a visible **Fill missing profiles** bulk action with progress, source-blocked reporting, idempotency, and no guessing on ambiguous names.
+
+### 2.11 Trailer quality
+
+JavTrailers provides a 1080p HLS master for many titles; JavDB's public preview is 720p and DMM's CDN is blocked here. The fork now prefers JavTrailers, then JavDB, then DMM. See [TRAILERS.md](TRAILERS.md).
 
 ---
 
@@ -553,6 +613,36 @@ Acceptance:
 - `ffprobe` on a 7 GB file completes within 20 s.
 - The diagnostics card shows a clear error when the shared client ID quota is hit.
 
+### 4.10 Bulk performer profile enrichment
+
+Current state: profiles are filled by `performer_profile_followup`, one entity per task. It is slow, easy to starve behind avatar jobs, and blocked entirely when the source requires a browser the container does not have.
+
+Required API:
+
+```text
+POST /api/performers/profiles/backfill
+  {"entity_ids": [1, 2, ...], "refresh": false}   # omit ids = all missing
+GET  /api/performers/profiles/backfill
+```
+
+Required behaviour:
+
+- Enqueue through the existing follow-up/task system, not the HTTP thread.
+- One task per entity, deduplicated by `entity_id`.
+- Respect source rate limits and cooldowns; a 403 must not be retried in a loop.
+- Skip human-authored rows.
+- Bind the source id even when the profile page is partial.
+- Record `source_url` and batch id for reversibility.
+- Return partial success with `checked`, `written`, `missing`, `blocked`, `failed`.
+- Add a **Fill missing profiles** button on `/performers`.
+
+Acceptance:
+
+- A batch of 60 completes with per-row outcomes; one bad row does not fail the batch.
+- Re-running the same batch does not duplicate rows.
+- Ambiguous names are reported, never assigned by guess.
+- A source block is visible in the UI with the source name and a retry hint.
+
 ---
 
 ## 5. CloudDrive2 and PikPak reference
@@ -562,8 +652,11 @@ Acceptance:
 - Cloud storage with offline download.
 - Peach submits magnets directly to PikPak's API.
 - Files stay in PikPak.
-- PikPak must be mounted as a Peach media root for playback/scan.
+- PikPak is mounted as the `PikPak` media root through rclone WebDAV (`/mnt/pikpak` → `/media/pikpak`).
+- Current target: `/My Pack/Peach`; ledger prefix: `R:\peach\pikpak`.
 - Free tier is small (about 6 GB); paid tiers are needed for videos.
+- PikPak's web token needs captcha tokens even for read endpoints; the fork supplies them for file and task listing.
+- Refresh tokens are single-use; only one process may refresh them. See [PIKPAK.md](PIKPAK.md).
 
 ### CloudDrive2
 
@@ -589,6 +682,9 @@ Acceptance:
 - Backfill metadata for 13 main videos from filenames.
 - Verify `/performers` and the remaining subscription.
 - Create pre-change backups.
+- Configure PikPak: WebDAV credential, rclone mount, Peach `PikPak` library, download target, direct-provider captcha fix.
+- Prefer JavTrailers 1080p previews with JavDB/DMM fallback.
+- Backfill performer profiles from archived minnano-av pages.
 
 ### Phase 1 — fork packaging and English
 
@@ -636,6 +732,9 @@ Acceptance:
 | Backup | `compose.yaml`, `scripts/backup.sh`, `scripts/restore.sh`, `Dockerfile` or sidecar image |
 | Installer | `install.sh`, `.env.example`, `compose.yaml`, `README-INSTALL.md` |
 | GDrive diagnostics | `src/peach/diagnostics.py`, settings page, systemd unit |
+| PikPak | `src/peach/downloads_pikpak.py`, `src/peach/downloads_channels.py`, `compose.yaml`, `config.toml`, `rclone-pikpak.service` |
+| Trailers | `src/peach/javtrailers_preview.py`, `src/peach/web_jav_detail.py`, `src/peach/preview_cache.py`, `/jav-preview` route |
+| Performer profiles | `src/peach/performer_profile_followup.py`, `src/peach/minnano_av.py`, `src/peach/performer_profiles.py`, `/performers` UI |
 
 ---
 
@@ -666,8 +765,12 @@ Acceptance:
 - OneDrive: removed; do not re-add.
 - Downloads policy: GDrive is the library; Downloads is staging only.
 - GDrive OAuth client ID: created and authorized on 2026-10-31; keep the client secret in `rclone.conf` only, never in Git.
-- rclone restart rule: restart Peach after any `rclone-gdrive` restart to refresh the bind mount.
+- rclone restart rule: restart Peach after any `rclone-gdrive` or `rclone-pikpak` restart to refresh the bind mount.
 - JavDB session: must be refreshed when JavDB expires it. The fork should detect login pages and explain how to refresh.
+- PikPak: WebDAV mount and direct provider are configured. Keep the WebDAV credential separate from the account password. Only one process may refresh the PikPak token.
+- PikPak captcha: read endpoints now request a captcha token; if PikPak changes its web client constants, refresh the session and update `WEB` in `downloads_pikpak.py`.
+- Performer profiles: minnano-av and avwikidb are Cloudflare-blocked from the container. The backfill used archived snapshots; the long-term fork fix is a bulk action plus a browser/host fallback or a different source.
+- Trailer source: JavTrailers is not an API; it can change. Keep the DVD-ID identity check and the JavDB/DMM fallback.
 - No secrets, cookies, tokens, or database dumps belong in this repository.
 
 ---
@@ -683,6 +786,10 @@ docker logs --tail 100 peach-peach-1
 systemctl status rclone-gdrive.service
 systemctl status rclone-gdrive-upload.timer
 
+# PikPak mount
+systemctl status rclone-pikpak.service
+ls -la '/mnt/pikpak/My Pack/Peach'
+
 # Cloudflare tunnel
 systemctl status peach-tunnel.service
 
@@ -695,9 +802,13 @@ Important paths:
 - `/var/lib/peach/config.toml`
 - `/var/lib/peach/database/ledger.db`
 - `/var/lib/peach/secrets/`
+- `/var/lib/peach/secrets/follow/download-pikpak.json`
 - `/var/lib/peach/backups/`
 - `/opt/peach/compose.yaml`
 - `/home/desktop/.config/rclone/rclone.conf`
 - `/etc/systemd/system/peach*.service`
 - `/etc/systemd/system/rclone-*.service`
 - `/etc/peach/`
+- `/var/lib/peach/overrides/web_jav_detail.py`
+- `/var/lib/peach/overrides/javtrailers_preview.py`
+- `/var/lib/peach/overrides/downloads_pikpak.py`

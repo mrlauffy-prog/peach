@@ -209,6 +209,16 @@ class PikPakClient:
             raise _changed("没有 captcha_token")
         return str(token)
 
+    def _read_captcha(self, action: str) -> str:
+        """A captcha for a read endpoint; unknown web clients can only try without it.
+
+        An unknown client id has no signing constants. Refreshing still works, and
+        PikPak may allow the read, so do not turn a task listing into a hard error
+        before the request is even sent. Submissions still call `_drive_captcha`
+        and refuse to sign.
+        """
+        return self._drive_captcha(action) if self.profile.known else ""
+
     def _drive_captcha(self, action: str) -> str:
         profile = self.profile
         if not profile.known:
@@ -323,9 +333,12 @@ class PikPakClient:
         found: list[dict] = []
         token = ""
         for _page in range(MAX_PAGES):
+            # PikPak's web session requires a captcha token even for read-only
+            # file listings. Without it the API answers captcha_invalid (401).
+            captcha = self._read_captcha("GET:/drive/v1/files")
             payload = self._api("GET", "/drive/v1/files", params={
                 "parent_id": parent_id, "limit": 200, "page_token": token,
-                "filters": json.dumps({"trashed": {"eq": False}})})
+                "filters": json.dumps({"trashed": {"eq": False}})}, captcha=captcha)
             files = payload.get("files")
             if not isinstance(files, list):
                 raise _changed("文件列表")
@@ -352,9 +365,10 @@ class PikPakClient:
         found: list[dict] = []
         token = ""
         for _page in range(MAX_PAGES):
+            captcha = self._read_captcha("GET:/drive/v1/tasks")
             payload = self._api("GET", "/drive/v1/tasks", params={
                 "type": "offline", "limit": 100, "page_token": token,
-                "filters": json.dumps({"phase": {"in": PHASES}})})
+                "filters": json.dumps({"phase": {"in": PHASES}})}, captcha=captcha)
             tasks = payload.get("tasks")
             if not isinstance(tasks, list):
                 raise _changed("任务列表")
