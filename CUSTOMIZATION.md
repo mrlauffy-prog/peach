@@ -32,7 +32,8 @@ Host: Arch Linux VM (Linode), Docker, host networking.
   - `rclone-gdrive.service` mounts `gdrive:` at `/mnt/gdrive`.
   - `rclone-gdrive-upload.timer` runs every 10 minutes:
     `rclone move /home/desktop/Downloads gdrive:jav/favourites --min-age 30m`.
-  - The Google remote still uses rclone's shared OAuth client ID. This is a production blocker.
+  - A dedicated Google OAuth client ID/secret was created and authorized on 2026-10-31. The old shared rclone client ID is no longer used.
+  - **Restart Peach after restarting `rclone-gdrive`.** The bind mount uses `rslave`, but it does not recover an already-running container from a remounted FUSE endpoint. Without a Peach restart, `/media/gdrive` reports `Transport endpoint is not connected` and Peach returns `offline`.
 - OneDrive was removed completely on 2026-10-31:
   - config source removed
   - compose volume removed
@@ -109,9 +110,11 @@ Fork fixes:
 - Add a filename-only metadata path that does not require reading the media directory first.
 - Add a retry/repair action for metadata that failed because of mount timeouts.
 
-### 2.4 Playback and previews time out
+### 2.4 Playback and previews time out — fixed
 
-Cause: rclone uses the shared Google Drive OAuth client ID. Google returns:
+Status: fixed on 2026-10-31 with a dedicated OAuth client ID. The notes below remain as the diagnosis and the fork acceptance criteria.
+
+Cause: rclone used the shared Google Drive OAuth client ID. Google returned:
 
 ```text
 Quota exceeded for quota metric 'Queries'
@@ -123,12 +126,18 @@ reason: RATE_LIMIT_EXCEEDED
 
 This causes 20–50 second reads and ffprobe/preview timeouts. Cached files play; cold files often fail.
 
-Fork/ops fix:
+Fix applied:
 
-- Create a dedicated Google OAuth client ID/secret for rclone.
-- Re-authorize `gdrive:`.
-- Add aggressive timeouts and retries to the mount.
+- Created a dedicated Google OAuth client ID/secret for rclone.
+- Re-authorized `gdrive:`.
+- Restarted `rclone-gdrive.service` and then `peach.service`.
+- Verified a previously slow 7 GB file: 1 MB reads now complete in ~1–2 s, and Peach stream plans return in ~1–4 s.
+
+Fork/ops follow-up:
+
+- Keep the mount timeout/retry flags for future quota incidents.
 - Add a health check that surfaces quota errors instead of silently timing out.
+- Add a restart helper that restarts Peach after rclone so `rslave` remounts are picked up.
 
 ### 2.5 Stale local files and the Downloads/upload conflict
 
@@ -621,7 +630,8 @@ Acceptance:
 - License: AGPL-3.0-or-later; keep source available.
 - OneDrive: removed; do not re-add.
 - Downloads policy: GDrive is the library; Downloads is staging only.
-- GDrive OAuth client ID: still required from the user; blocks reliable playback, metadata scanning, and cloud backup.
+- GDrive OAuth client ID: created and authorized on 2026-10-31; keep the client secret in `rclone.conf` only, never in Git.
+- rclone restart rule: restart Peach after any `rclone-gdrive` restart to refresh the bind mount.
 - JavDB session: must be refreshed when JavDB expires it. The fork should detect login pages and explain how to refresh.
 - No secrets, cookies, tokens, or database dumps belong in this repository.
 
